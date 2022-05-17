@@ -3,18 +3,18 @@
   and send UP, DOWN and STOP commands (replacing button presses)
 */
 
-#include <ESP8266WiFi.h>
-#include "ESPAsyncWebServer.h"
+#include "WiFiManager.h"
+#include <ESP8266WebServer.h>
 
-#define UP 16                   // GPIO16 send UP command
-#define STOP 14                 // GPIO14 send STOP command
-#define DOWN 12                 // GPIO12 send DOWN command
-#define WIFI_SSID "<WiFi_SSID>" // WiFi SSID
-#define WIFI_PASS "<WiFi_pwd>"  // WiFi Password
-#define PRESS_DELAY 1000        // Time for pressing button
+#define UP 16                       // GPIO16 send UP command
+#define STOP 14                     // GPIO14 send STOP command
+#define DOWN 12                     // GPIO12 send DOWN command
+#define PRESS_DELAY 1000            // Time for pressing button
+#define SERVER_PORT 80              // REST API port
+#define WIFI_SETUP_SSID "WifiSetup" // Name of WiFi setup network
 
-AsyncWebServer server(80);
 uint8_t command = ' ';
+ESP8266WebServer server(SERVER_PORT);
 
 void setup() {
   Serial.begin(115200);
@@ -28,40 +28,43 @@ void setup() {
   digitalWrite(UP, HIGH);
 
   // WiFi connect
-  Serial.print("Connecting to SSID ");
-  Serial.println(WIFI_SSID);
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+  WiFiManager wm;
+  bool res;
+  res = wm.autoConnect(WIFI_SETUP_SSID);
+  if(!res) {
+    Serial.println("Failed to connect.");
   }
-  Serial.println("");
-  Serial.println("WiFi connected");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
+  else {
+    Serial.print("Connected to ");
+    Serial.println(WiFi.localIP());
+  }
 
   // Handle the HTTP GET requests
-  server.on("/up", HTTP_GET, [] (AsyncWebServerRequest * request){
-    Serial.print("Got command UP");
+  server.on("/up", []() {
     command = 'U';
-    request->send(200, "text/plain", "OK");
+    server.send(200, "text/plain", "OK");
   });
-  server.on("/stop", HTTP_GET, [] (AsyncWebServerRequest * request){
-    Serial.print("Got command STOP");
+  server.on("/stop", []() {
     command = 'S';
-    request->send(200, "text/plain", "OK");
+    server.send(200, "text/plain", "OK");
   });
-  server.on("/down", HTTP_GET, [] (AsyncWebServerRequest * request){
-    Serial.println("Got command DOWN");
+  server.on("/down", []() {
     command = 'D';
-    request->send(200, "text/plain", "OK");
+    server.send(200, "text/plain", "OK");
+  });
+  server.onNotFound([]() {
+    server.send(404, "text/plain", "Not found");
   });
 
   server.begin();
+  Serial.print("Server started on port ");
+  Serial.println(SERVER_PORT);
 }
 
 void loop() {
+  server.handleClient();
+
   // Check if 'command' set and act accordingly
   // (delay does not seem to work in setup section)
   if(command == 'U') {
